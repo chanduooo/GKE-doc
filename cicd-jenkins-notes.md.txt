@@ -1,0 +1,221 @@
+Jenkins Installation
+--------------------
+1. Need to Lunch one ec2 instance
+2. Go to jenkins.io in browser then click on download option.
+3. Run the below commands to install jenkins in the amazon linx server .
+	sudo wget -O /etc/yum.repos.d/jenkins.repo \
+    https://pkg.jenkins.io/redhat-stable/jenkins.repo
+	sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+	sudo yum upgrade
+	# Add required dependencies for the jenkins package
+	sudo yum install java-17-amazon-corretto-headless
+	sudo yum install jenkins
+4. Check the jenkins status whether its running or not.
+	sudo systemctl status jenkins
+	sudo systemctl start jenkins
+5. Jenkins default port no: 8080 need to enable in security group.
+6. Copy the public ip of the server then browse the Ip address along with jenkins port number.
+7. Once jenkins up and running and copy admin password file path.
+8. Go to server use below command to show the admin password.
+   sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+9. Paste the password click on ok then click on install suggested plugins.
+10. Enter the user details like username,password and email.
+11. Click on save.
+
+Upgrade the jenkins version
+---------------------------
+1. Go to jenkins server.
+2. Go to usr/share/java folder inside that we have jenkins.war file.
+3. Stop the jenkins server.
+4. Rename the existing jenkins.war file to jenkins.war.date
+5. Go to jenkin download then copy the jenkins.war file link
+6. Go to jenkin server download jenkins.war file with wget command follow by link.
+7. Start the jenkins.
+
+step1: Ingration git with jenkins via credentials Option
+-------------------------------------------------
+1. Create a tocken in github and copy it.
+2. Need to install git in jenkins server.
+3. Copy the path of the git and paste in tool session we have git path option paste it.
+2. Go to jenkins then manage jenkins we have credentials option and click on it.
+3. Select the global option.
+4. Select the Usernaem and password option and paste username and  the token and name of the cred.
+5. Then click on new item for creating pipeline.
+6. Enter the name of the pipeline and select pipeline.
+7. Inside take example pipeline stage helo world.
+8. click on pipeline syntax select git and enter all the cofiguration of the git then generate the pipeline script.
+9. Remove Helloworld and paste git pipeline syntax. then save.
+
+step2: Ingration maven with jekins
+----------------------------------
+1. Go to jenkins server and install the maven.
+2. Go to jenkins console--> manage jenkins-->tools-->Maven installation give the name and select install automatically.
+3. Go to pipeline congigure write pipeline stage for mave using mvn clean package command.
+
+step3: Ingration Sonarqube with jenkins and install sonarqube server 
+--------------------------------------------------------------------
+1. create a token is sonarqube
+2. store that token in jenkins creds.
+3. Install the sonarqube plugin.
+4. Go to tools section configure sonarqube version.
+5. Go to manage jenkins --> system --> sonarqube servers -->enable environment.
+6. Enter name , sonarqube URL and select token that have configure in jenkins creds.
+7. Go to pipeline write the stage for sonarqube below conde.
+	stage('SonarQube Analysis') {
+            steps {
+              withSonarQubeEnv('Sonarqube') { // Name configured in Jenkins -> Configure System
+                    sh '''
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=java-application \
+                    '''
+              }
+            }
+8. then build the pipeline.
+
+step 4: Integrate docker with jenkins
+------------------------------------
+1. create a Dockerfiel in scm
+2. Install docker in jenkins
+3. install the docker plugins.
+4. write the stage for docker registry,build the image and push to docker repo.
+
+step 5: Integrate the trivy with jenkins
+----------------------------------------
+1. Install trivy in jenkins server
+2. write the stage for checking vuluribilities in images using below command
+	trivy image imagename > log.txt
+
+EKS cluster deployment using jenkins pipeline through terraform
+---------------------------------------------------------------
+1. Download the module for Eks cluster in terraform site.
+https://developer.hashicorp.com/terraform/tutorials/kubernetes/eks
+2. Install the terraform in jenkins server.
+https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
+3. Create access key and secret key in aws for communicate with aws cloud.
+4. Go to jenkins server UI then configure the access key and secret key in jenkins creds.
+6. Write the pipeline for deploying eks cluster in aws
+	pipeline {
+    agent any
+    
+    parameters {
+        choice choices: ['apply', 'destroy'], name: 'action'
+        }
+    environment {
+    AWS_ACCESS_KEY_ID     = credentials('aws-access-key')
+    AWS_SECRET_ACCESS_KEY = credentials('aws-secret-key')
+    }
+    stages {
+        stage('Git checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'githu-integration', url: 'https://github.com/chanduooo/EKS-Action.git'
+            }
+        }
+        stage('terraform initilization') {
+            steps {
+                sh 'terraform init'
+            }
+        }
+        stage('terraform validate') {
+            steps {
+                sh 'terraform validate'
+            }
+        }
+        stage('terraform plan') {
+            steps {
+                sh 'terraform plan'
+            }
+        }
+        stage('terraform apply') {
+            steps {
+                sh 'terraform ${action} -auto-approve'
+            }
+        }
+    }
+}
+7. Go to jenkins server install the kubectl.
+	https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+8. write a manfest yaml file for deployment ,secret and service.
+9. Write a state for connecting eks cluster and check the nodes and deployment the deployment files.
+
+
+pipeline {
+    agent any
+   
+    environment {
+    AWS_ACCESS_KEY_ID     = credentials('aws-access-key')
+    AWS_SECRET_ACCESS_KEY = credentials('aws-secret-key')
+    }
+    
+    stages {
+        stage('Hello') {
+            steps {
+                git branch: 'main', credentialsId: 'githu-integration', url: 'https://github.com/devops-aws-17/java-project.git'
+            }
+        }
+        stage('Maven Build') {
+            steps {
+               sh 'mvn clean package' 
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+              withSonarQubeEnv('Sonarqube') { // Name configured in Jenkins -> Configure System
+                    sh '''
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=java-application \
+                    '''
+              }
+            }
+        }
+        stage('Docker build') {
+            steps {
+               withDockerRegistry(credentialsId: 'docker-cred', url: 'https://index.docker.io/v1/') {
+                    sh '''
+                        docker build -t prasadchandu/mini2-java:latest .
+                    '''
+                }
+            }
+        }
+        stage('Scan with Trivy') {
+            steps {
+                sh '''
+                    echo "🔍 Running Trivy scan..."
+                    trivy image prasadchandu/mini2-java:latest > log.txt
+                '''
+            }
+        }
+        stage('Docker tag and push the image') {
+            steps {
+               withDockerRegistry(credentialsId: 'docker-cred', url: 'https://index.docker.io/v1/') {
+                    sh '''
+                        docker tag prasadchandu/mini2-java:latest prasadchandu/mini2-java:v2.0
+                        docker push prasadchandu/mini2-java:v2.0
+                    '''
+                }
+            }
+        }
+        stage('connecting the EKS cluster') {
+            steps {
+                sh 'aws eks update-kubeconfig --region us-east-1 --name education-eks-hGrm3R8S'
+            }
+        }
+        stage('Checking node status') {
+            steps {
+                sh 'kubectl get nodes'
+            }
+        }
+        stage('deploy application into eks') {
+            steps {
+                sh 'kubectl apply -f ./kubernetes-deploy.yaml'
+            }
+        }
+        stage('check the pods and services') {
+            steps {
+                sh '''
+                    kubectl get pods
+                    kubectl get svc
+                '''
+            }
+        }
+    }
+}
